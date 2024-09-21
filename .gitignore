@@ -1,0 +1,20 @@
+# Ignore Python bytecode
+__pycache__/
+*.pyc
+
+# Ignore data folders
+data/
+models/
+face_dataset/
+model_data/
+
+# Ignore logs
+logs/
+
+# Ignore virtual environments
+venv/
+.env/
+
+*.mp4
+*.jpg
+.DS_Store
