@@ -7,12 +7,21 @@ import json
 from io import BytesIO
 import cv2, io
 from PIL import Image   
-import os
+import os, logging
 from retinaface import Retinaface
+from model.messages import Messages 
+from handler.handler import save_image, get_image_paths_and_names
+
 
 app = Flask(__name__)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Constants
+FACE_DATASET_DIR = "face_dataset"
+IMAGE_FORMAT = "JPEG"
 
 @app.route('/face/get-list', methods=['GET'])
 def get_names():
@@ -23,40 +32,37 @@ def get_names():
 @app.route('/face/add-identity', methods=['POST'])
 def add_identity(): 
     try:
+
         data = request.json
         name = (data.get("name"))
         image = (data.get("image"))
         
-        # print(image)
-        print(name)
-        filename = "face_dataset/" + name + "_1.jpg"
-        if (image!=None):
-            imgdata = base64.b64decode(image)
-            img = Image.open(io.BytesIO(imgdata))
-            img.save(filename, format="JPEG")
+        if not name or not image:
+            logger.warning("Missing name or image in request.")
+            return jsonify({'code': Messages.MISSING_FIELDS['code'], 
+                            'message': Messages.MISSING_FIELDS['message']}), 400
 
-        print("Convert successfully")
+        filename = os.path.join(FACE_DATASET_DIR, f"{name}_1.jpg")
+        save_image(image, filename)
 
         retinaface = Retinaface(1)
 
-        list_dir = os.listdir("face_dataset")
-        image_paths = []
-        names = []
-        for name in list_dir:
-            image_paths.append("face_dataset/"+name)
-            names.append(name.split("_")[0])
+        image_paths, names = get_image_paths_and_names(FACE_DATASET_DIR)
 
         retinaface.encode_face_dataset(image_paths,names)
 
-        code = "0000"
+        code = Messages.SUCCESS['code']
+
+        response_message = Messages.SUCCESS['message']
 
     except:
+        logger.error("Error processing request: %s", e)
+        code = Messages.GENERIC_ERROR['code']
+        response_message = Messages.GENERIC_ERROR['message']
 
-        code = "1111"
+    logger.info("Response code: %s", code)
 
-    print(code)
-
-    return jsonify({'code': code})
+    return jsonify({'code': code, 'message': response_message})
 
 @app.route('/face/recognize', methods=['POST']) 
 def predict():
