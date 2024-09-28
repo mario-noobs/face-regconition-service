@@ -158,6 +158,9 @@ class Retinaface(object):
             self.facenet = self.facenet.cuda()
         print('Finished!')
 
+    def reload_face_feature(self, backbone):
+        self.redis_storage.load_face_data(backbone)
+
     def encode_face_dataset(self, image_paths, names):
         face_encodings = []
         for index, path in enumerate(tqdm(image_paths)):
@@ -368,7 +371,9 @@ class Retinaface(object):
     #---------------------------------------------------#
     #   检测图片
     #---------------------------------------------------#
-    def detect_image(self, image):
+    def search_face(self, image):
+
+        image = base64_to_numpy_image(image)
         #---------------------------------------------------#
         #   对输入图像进行一个备份，后面用于绘图
         #---------------------------------------------------#
@@ -443,7 +448,7 @@ class Retinaface(object):
             #   如果没有预测框则返回原图
             #---------------------------------------------------#
             if len(boxes_conf_landms) <= 0:
-                return old_image
+                return old_image, {}
 
             #---------------------------------------------------------#
             #   如果使用了letterbox_image的话，要把灰条的部分去除掉。

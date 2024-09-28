@@ -16,8 +16,8 @@ import logging
 from PIL import Image
 from io import BytesIO
 from handler.handlers import FaceHandler, FaceFeatureExtractionInterface
-from model.request import CreateFaceFeatureRequest
-from model.response import CreateFaceFeatureResponse
+from model.request import CreateFaceFeatureRequest, RecognizeFaceFeatureRequest
+from model.response import CreateFaceFeatureResponse, RecognizeFaceFeatureResponse
 from model.exceptions import FaceFeatureException
 
 app = Flask(__name__)
@@ -88,31 +88,50 @@ def add_identity():
 @app.route('/face/recognize', methods=['POST'])
 def predict():
     try:
-        retinaface = Retinaface()
+        
         data = request.json
-        response = {}
-        image = (data.get("image"))
-        if (image!=None):
-            imgdata = base64.b64decode(image)
-            img = Image.open(io.BytesIO(imgdata))
-            image  = cv2.cvtColor(np.array(img),cv2.COLOR_BGR2RGB)
+        userId = (data.get("userId"))
+        image = (data.get("imageBase64"))
+        flow = (data.get("flow"))
+        requestId = (data.get("requestId"))
+        algorithm_det = (data.get("algorithmDet"))
+        algorithm_reg = (data.get("algorithmReg"))
 
-        r_image, data = retinaface.detect_image(image)
+        recognizeFaceFeatureResponse = RecognizeFaceFeatureResponse()
+        
+        if not userId or not image:
+            logger.warning("Missing userId or image in request.")
+            raise FaceFeatureException(Messages.MISSING_FIELDS)
 
-        cv2.imwrite("face.jpg", r_image)
-        with open("face.jpg", "rb") as image_file:
-            encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-       
-        print(data)
-        response["code"] = "0000"
-        response['confidence'] = data
-        response['raw_image'] = encoded_string
-    except:
-        response["code"] = "1111"
-        response['confidence'] = "NONE"
-        response['raw_image'] = "image error"
+        if not algorithm_det or not algorithm_reg:
+            logger.warning("Missing algorithm in request.")
+            raise FaceFeatureException(Messages.MISSING_ALG)  
 
-    return response
+        recognizeFaceFeatureRequest = RecognizeFaceFeatureRequest()
+        recognizeFaceFeatureRequest.user_id = userId
+        recognizeFaceFeatureRequest.request_id = requestId
+        recognizeFaceFeatureRequest.flow = flow
+        recognizeFaceFeatureRequest.image_base64 = image
+        recognizeFaceFeatureRequest.alg_det = algorithm_det
+        recognizeFaceFeatureRequest.alg_reg = algorithm_reg        
+      
+        logger.info(recognizeFaceFeatureRequest.to_dict())
+
+        recognizeFaceFeatureResponse = face_handler.face_search(recognizeFaceFeatureRequest)
+
+    except FaceFeatureException as ce:
+        logger.error("FaceFeatureException processing request: %s", ce)
+        recognizeFaceFeatureResponse.code = ce.code
+        recognizeFaceFeatureResponse.message = ce.message
+
+    except Exception as e:
+        logger.error("Error processing request: %s", e)
+        recognizeFaceFeatureResponse.code = Messages.GENERIC_ERROR['code']
+        recognizeFaceFeatureResponse.message = str(e)
+
+    logger.info(recognizeFaceFeatureResponse.to_dict())
+
+    return jsonify(recognizeFaceFeatureResponse.to_dict())
     
 if __name__ == '__main__':
     #app.run(debug=True, host="0.0.0.0")
