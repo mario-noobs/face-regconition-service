@@ -1,6 +1,5 @@
 from tokenize import String
 from flask import Flask, jsonify, abort, make_response, request
-from pip._vendor.appdirs import unicode
 import numpy as np
 import base64
 import json
@@ -9,9 +8,17 @@ import cv2, io
 from PIL import Image   
 import os, logging
 from retinaface import Retinaface
-from model.messages import Messages 
-from handler.handler import save_image, get_image_paths_and_names
-
+from model.messages import Messages
+from model import *
+from utils.helpers import is_base64_image, convert_string_to_hash
+import hashlib
+import logging
+from PIL import Image
+from io import BytesIO
+from handler.handlers import FaceHandler, FaceFeatureExtractionInterface
+from model.request import CreateFaceFeatureRequest
+from model.response import CreateFaceFeatureResponse
+from model.exceptions import FaceFeatureException
 
 app = Flask(__name__)
 
@@ -23,48 +30,62 @@ logger = logging.getLogger(__name__)
 FACE_DATASET_DIR = "face_dataset"
 IMAGE_FORMAT = "JPEG"
 
-@app.route('/face/get-list', methods=['GET'])
-def get_names():
-    known_face_names = np.load("model_data/{backbone}_names.npy".format(backbone="mobilenet"))
-    print(known_face_names)
-    return jsonify({'names': list(known_face_names)})
+face_handler = FaceHandler()
 
-@app.route('/face/add-identity', methods=['POST'])
+@app.route('/face/create-identity', methods=['POST'])
 def add_identity(): 
     try:
 
         data = request.json
-        name = (data.get("name"))
-        image = (data.get("image"))
         
-        if not name or not image:
-            logger.warning("Missing name or image in request.")
-            return jsonify({'code': Messages.MISSING_FIELDS['code'], 
-                            'message': Messages.MISSING_FIELDS['message']}), 400
+        userId = (data.get("userId"))
+        image = (data.get("imageBase64"))
+        flow = (data.get("flow"))
+        requestId = (data.get("requestId"))
+        algorithm_det = (data.get("algorithmDet"))
+        algorithm_reg = (data.get("algorithmReg"))
 
-        filename = os.path.join(FACE_DATASET_DIR, f"{name}_1.jpg")
-        save_image(image, filename)
+        createFaceFeatureResponse = CreateFaceFeatureResponse()
+        
+        if not userId or not image:
+            logger.warning("Missing userId or image in request.")
+            raise FaceFeatureException(Messages.MISSING_FIELDS)
 
-        retinaface = Retinaface(1)
+        if not algorithm_det or not algorithm_reg:
+            logger.warning("Missing algorithm in request.")
+            raise FaceFeatureException(Messages.MISSING_ALG)  
 
-        image_paths, names = get_image_paths_and_names(FACE_DATASET_DIR)
+        createFaceFeatureRequest = CreateFaceFeatureRequest()
+        createFaceFeatureRequest.user_id = userId
+        createFaceFeatureRequest.request_id = requestId
+        createFaceFeatureRequest.flow = flow
+        createFaceFeatureRequest.image_base64 = image
+        createFaceFeatureRequest.alg_det = algorithm_det
+        createFaceFeatureRequest.alg_reg = algorithm_reg        
+      
+        logger.info(createFaceFeatureRequest.to_dict())
 
-        retinaface.encode_face_dataset(image_paths,names)
+        if not is_base64_image(image):
+            logger.warning("Invalid Base64 Image.")
+            raise FaceFeatureException(Messages.IMAGE_BASE64_ERROR) 
 
-        code = Messages.SUCCESS['code']
+        createFaceFeatureResponse = face_handler.create_feature(createFaceFeatureRequest)
 
-        response_message = Messages.SUCCESS['message']
+    except FaceFeatureException as ce:
+        logger.error("FaceFeatureException processing request: %s", ce)
+        createFaceFeatureResponse.code = ce.code
+        createFaceFeatureResponse.message = ce.message
 
-    except:
+    except Exception as e:
         logger.error("Error processing request: %s", e)
-        code = Messages.GENERIC_ERROR['code']
-        response_message = Messages.GENERIC_ERROR['message']
+        createFaceFeatureResponse.code = Messages.GENERIC_ERROR['code']
+        createFaceFeatureResponse.message = e
 
-    logger.info("Response code: %s", code)
+    logger.info(createFaceFeatureResponse.to_dict())
 
-    return jsonify({'code': code, 'message': response_message})
+    return jsonify(createFaceFeatureResponse.to_dict())
 
-@app.route('/face/recognize', methods=['POST']) 
+@app.route('/face/recognize', methods=['POST'])
 def predict():
     try:
         retinaface = Retinaface()
@@ -95,4 +116,4 @@ def predict():
     
 if __name__ == '__main__':
     #app.run(debug=True, host="0.0.0.0")
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)

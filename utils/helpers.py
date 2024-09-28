@@ -4,6 +4,9 @@ import base64
 import logging
 from flask import Flask, request, jsonify
 from PIL import Image
+import re
+import hashlib
+import base64
 
 def save_image(image_data, filename):
     """Decodes and saves the image from base64 data."""
@@ -29,3 +32,13 @@ def get_image_paths_and_names(dataset_dir):
         logger.error("Error reading image paths: %s", e)
         raise
     return image_paths, names
+
+def is_base64_image(s):
+    try:
+        return base64.b64encode(base64.b64decode(s)) == s
+    except Exception:
+        return False
+
+def convert_string_to_hash(word):
+    digest = hashlib.sha1(word.encode('utf-16-le')).digest()
+    return base64.b64encode(digest)
