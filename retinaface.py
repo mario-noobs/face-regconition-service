@@ -16,6 +16,9 @@ from utils.utils import (Alignment_1, compare_faces, letterbox_image,
 from utils.utils_bbox import (decode, decode_landm, non_max_suppression,
                               retinaface_correct_boxes)
 
+from databases.redis_db import RedisStorage
+from utils.helpers import base64_to_numpy_image
+
 
 #--------------------------------------#
 #   写中文需要转成PIL来写。
@@ -107,6 +110,7 @@ class Retinaface(object):
         for name, value in kwargs.items():
             setattr(self, name, value)
 
+        self.redis_storage = RedisStorage()
         #---------------------------------------------------#
         #   不同主干网络的config信息
         #---------------------------------------------------#
@@ -122,8 +126,9 @@ class Retinaface(object):
         self.generate()
 
         try:
-            self.known_face_encodings = np.load("model_data/{backbone}_face_encoding.npy".format(backbone=self.facenet_backbone))
-            self.known_face_names     = np.load("model_data/{backbone}_names.npy".format(backbone=self.facenet_backbone))
+            self.redis_storage.load_face_data("mobilenet")
+            self.known_face_encodings = self.redis_storage.known_face_encodings
+            self.known_face_names     = self.redis_storage.known_face_names
         except:
             if not encoding:
                 print("载入已有人脸特征失败，请检查model_data下面是否生成了相关的人脸特征文件。")
@@ -269,84 +274,96 @@ class Retinaface(object):
         np.save("model_data/{backbone}_face_encoding.npy".format(backbone=self.facenet_backbone),face_encodings)
         np.save("model_data/{backbone}_names.npy".format(backbone=self.facenet_backbone),names)
     
-    def encode_face_image(self, image):
-                   
-        old_image   = image.copy()
+    def encode_face_image(self, name, image, backbone) -> int:
         
-        im_height, im_width, _ = np.shape(image)
+        status = 2
 
-        scale = [
-            np.shape(image)[1], np.shape(image)[0], np.shape(image)[1], np.shape(image)[0]
-        ]
+        try:
 
-        scale_for_landmarks = [
-            np.shape(image)[1], np.shape(image)[0], np.shape(image)[1], np.shape(image)[0],
-            np.shape(image)[1], np.shape(image)[0], np.shape(image)[1], np.shape(image)[0],
-            np.shape(image)[1], np.shape(image)[0]
-        ]
-
-        if self.letterbox_image:
-            image = letterbox_image(image, [self.retinaface_input_shape[1], self.retinaface_input_shape[0]])
-            anchors = self.anchors
-        else:
-            anchors = Anchors(self.cfg, image_size=(im_height, im_width)).get_anchors()
-
-        with torch.no_grad():
-
-            image = torch.from_numpy(preprocess_input(image).transpose(2, 0, 1)).unsqueeze(0).type(torch.FloatTensor)
-
-            if self.cuda:
-                image               = image.cuda()
-                anchors             = anchors.cuda()
-
-            loc, conf, landms = self.net(image)
+            image = base64_to_numpy_image(image)
+                    
+            old_image   = image.copy()
             
-            boxes   = decode(loc.data.squeeze(0), anchors, self.cfg['variance'])
-            
-            conf    = conf.data.squeeze(0)[:, 1:2]
-            
-            landms  = decode_landm(landms.data.squeeze(0), anchors, self.cfg['variance'])
+            im_height, im_width, _ = np.shape(image)
 
-            boxes_conf_landms = torch.cat([boxes, conf, landms], -1)
-            boxes_conf_landms = non_max_suppression(boxes_conf_landms, self.confidence)
+            scale = [
+                np.shape(image)[1], np.shape(image)[0], np.shape(image)[1], np.shape(image)[0]
+            ]
 
-            if len(boxes_conf_landms) <= 0:
-                return None
+            scale_for_landmarks = [
+                np.shape(image)[1], np.shape(image)[0], np.shape(image)[1], np.shape(image)[0],
+                np.shape(image)[1], np.shape(image)[0], np.shape(image)[1], np.shape(image)[0],
+                np.shape(image)[1], np.shape(image)[0]
+            ]
 
             if self.letterbox_image:
-                boxes_conf_landms = retinaface_correct_boxes(boxes_conf_landms, \
-                    np.array([self.retinaface_input_shape[0], self.retinaface_input_shape[1]]), np.array([im_height, im_width]))
+                image = letterbox_image(image, [self.retinaface_input_shape[1], self.retinaface_input_shape[0]])
+                anchors = self.anchors
+            else:
+                anchors = Anchors(self.cfg, image_size=(im_height, im_width)).get_anchors()
 
-        boxes_conf_landms[:, :4] = boxes_conf_landms[:, :4] * scale
-        boxes_conf_landms[:, 5:] = boxes_conf_landms[:, 5:] * scale_for_landmarks
+            with torch.no_grad():
 
-        best_face_location  = None
-        biggest_area        = 0
-        for result in boxes_conf_landms:
-            left, top, right, bottom = result[0:4]
+                image = torch.from_numpy(preprocess_input(image).transpose(2, 0, 1)).unsqueeze(0).type(torch.FloatTensor)
 
-            w = right - left
-            h = bottom - top
-            if w * h > biggest_area:
-                biggest_area = w * h
-                best_face_location = result
+                if self.cuda:
+                    image               = image.cuda()
+                    anchors             = anchors.cuda()
 
-        crop_img = old_image[int(best_face_location[1]):int(best_face_location[3]), int(best_face_location[0]):int(best_face_location[2])]
-        landmark = np.reshape(best_face_location[5:],(5,2)) - np.array([int(best_face_location[0]),int(best_face_location[1])])
-        crop_img,_ = Alignment_1(crop_img,landmark)
+                loc, conf, landms = self.net(image)
+                
+                boxes   = decode(loc.data.squeeze(0), anchors, self.cfg['variance'])
+                
+                conf    = conf.data.squeeze(0)[:, 1:2]
+                
+                landms  = decode_landm(landms.data.squeeze(0), anchors, self.cfg['variance'])
 
-        crop_img = np.array(letterbox_image(np.uint8(crop_img),(self.facenet_input_shape[1],self.facenet_input_shape[0])))/255
-        crop_img = crop_img.transpose(2, 0, 1)
-        crop_img = np.expand_dims(crop_img,0)
+                boxes_conf_landms = torch.cat([boxes, conf, landms], -1)
+                boxes_conf_landms = non_max_suppression(boxes_conf_landms, self.confidence)
 
-        with torch.no_grad():
-            crop_img = torch.from_numpy(crop_img).type(torch.FloatTensor)
-            if self.cuda:
-                crop_img = crop_img.cuda()
+                if len(boxes_conf_landms) <= 0:
+                    return 0
+                
+                if self.letterbox_image:
+                    boxes_conf_landms = retinaface_correct_boxes(boxes_conf_landms, \
+                        np.array([self.retinaface_input_shape[0], self.retinaface_input_shape[1]]), np.array([im_height, im_width]))
 
-            face_encoding = self.facenet(crop_img)[0].cpu().numpy()
+            boxes_conf_landms[:, :4] = boxes_conf_landms[:, :4] * scale
+            boxes_conf_landms[:, 5:] = boxes_conf_landms[:, 5:] * scale_for_landmarks
 
-        return face_encoding
+            best_face_location  = None
+            biggest_area        = 0
+            for result in boxes_conf_landms:
+                left, top, right, bottom = result[0:4]
+
+                w = right - left
+                h = bottom - top
+                if w * h > biggest_area:
+                    biggest_area = w * h
+                    best_face_location = result
+
+            crop_img = old_image[int(best_face_location[1]):int(best_face_location[3]), int(best_face_location[0]):int(best_face_location[2])]
+            landmark = np.reshape(best_face_location[5:],(5,2)) - np.array([int(best_face_location[0]),int(best_face_location[1])])
+            crop_img,_ = Alignment_1(crop_img,landmark)
+
+            crop_img = np.array(letterbox_image(np.uint8(crop_img),(self.facenet_input_shape[1],self.facenet_input_shape[0])))/255
+            crop_img = crop_img.transpose(2, 0, 1)
+            crop_img = np.expand_dims(crop_img,0)
+
+            with torch.no_grad():
+                crop_img = torch.from_numpy(crop_img).type(torch.FloatTensor)
+                if self.cuda:
+                    crop_img = crop_img.cuda()
+
+                face_encoding = self.facenet(crop_img)[0].cpu().numpy()
+
+                self.redis_storage.store_face_data([name], [face_encoding], backbone)
+
+        except Exception as e:
+            print("Something error ", e)
+            status = -1
+
+        return status
 
     #---------------------------------------------------#
     #   检测图片

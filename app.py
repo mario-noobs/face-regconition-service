@@ -10,7 +10,7 @@ import os, logging
 from retinaface import Retinaface
 from model.messages import Messages
 from model import *
-from utils.helpers import is_base64_image, convert_string_to_hash
+from utils.helpers import is_valid_base64_image, convert_string_to_hash
 import hashlib
 import logging
 from PIL import Image
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 FACE_DATASET_DIR = "face_dataset"
 IMAGE_FORMAT = "JPEG"
 
-face_handler = FaceHandler()
+face_handler = FaceHandler(logger = logger)
 
 @app.route('/face/create-identity', methods=['POST'])
 def add_identity(): 
@@ -65,7 +65,7 @@ def add_identity():
       
         logger.info(createFaceFeatureRequest.to_dict())
 
-        if not is_base64_image(image):
+        if not is_valid_base64_image(image):
             logger.warning("Invalid Base64 Image.")
             raise FaceFeatureException(Messages.IMAGE_BASE64_ERROR) 
 
@@ -79,7 +79,7 @@ def add_identity():
     except Exception as e:
         logger.error("Error processing request: %s", e)
         createFaceFeatureResponse.code = Messages.GENERIC_ERROR['code']
-        createFaceFeatureResponse.message = e
+        createFaceFeatureResponse.message = str(e)
 
     logger.info(createFaceFeatureResponse.to_dict())
 

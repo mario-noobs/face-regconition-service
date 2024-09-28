@@ -7,6 +7,31 @@ from PIL import Image
 import re
 import hashlib
 import base64
+import numpy as np
+import cv2
+
+def base64_to_numpy_image(base64_string):
+    """Convert a Base64 string to a NumPy array."""
+    # Decode the Base64 string
+    image_data = base64.b64decode(base64_string)
+
+    # Convert the byte data to a NumPy array
+    np_array = np.frombuffer(image_data, dtype=np.uint8)
+
+    # Decode the image array to an actual image using OpenCV
+    image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+
+    return image
+
+def numpy_image_to_base64(image_array):
+    """Convert a NumPy array to a Base64 string."""
+    # Encode the image to a memory buffer using OpenCV
+    _, buffer = cv2.imencode('.jpg', image_array)
+    
+    # Convert the buffer to bytes and then to a Base64 string
+    base64_string = base64.b64encode(buffer).decode('utf-8')
+    
+    return base64_string
 
 def save_image(image_data, filename):
     """Decodes and saves the image from base64 data."""
@@ -33,12 +58,18 @@ def get_image_paths_and_names(dataset_dir):
         raise
     return image_paths, names
 
-def is_base64_image(s):
+def is_valid_base64_image(image_string):
+    # checking valid base64 image string 
+    result = True
     try:
-        return base64.b64encode(base64.b64decode(s)) == s
+        image = base64.b64decode(image_string)
+        img = Image.open(io.BytesIO(image))
     except Exception:
-        return False
+        result = False
+    
+    return result
 
 def convert_string_to_hash(word):
     digest = hashlib.sha1(word.encode('utf-16-le')).digest()
     return base64.b64encode(digest)
+
