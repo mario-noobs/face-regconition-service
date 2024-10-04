@@ -2,9 +2,11 @@ import numpy as np
 import redis
 
 class RedisStorage:
-    def __init__(self, host='75.119.149.223', port=6379, db=0):
+    def __init__(self, host='75.119.149.223', port=6379, redis_password='@2Vietnam', db=0):
         """Initialize the RedisStorage class and connect to Redis."""
-        self.redis_client = redis.Redis(host=host, port=port, db=db)
+        self.redis_client = redis.Redis(host=host, port=port, 
+        password=redis_password,
+        decode_responses=True, db=db)
 
     def store_face_data(self, names, encodings, backbone):
         """Store face encodings and names in Redis."""
