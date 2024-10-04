@@ -31,3 +31,21 @@ class CreateFaceFeatureResponse(BaseResponse):
             }
         })
         return base_dict
+
+class RecognizeFaceFeatureResponse(BaseResponse):
+    def __init__(self):
+        super().__init__()
+        self.user_id = None
+        self.request_id = None
+        self.searh_result = None
+
+    def to_dict(self):
+        base_dict = super().to_dict()
+        base_dict.update({
+            "data": {
+                "user_id": self.user_id,
+                "request_id": self.request_id,
+                "searh_result": self.searh_result,
+            }
+        })
+        return base_dict

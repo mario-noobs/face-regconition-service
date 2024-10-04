@@ -10,7 +10,26 @@ names = np.load("model_data/{}_names.npy".format("mobilenet"))
 data_dict = {name: encoding.tolist() for name, encoding in zip(names, encodings)}
 
 # Connect to Redis
-r = redis.Redis(host='localhost', port=6379, db=0)
+# Replace with your Redis server's host, port, and password
+redis_host = '75.119.149.223'  # or your Redis server IP
+redis_port = 6379          # default Redis port
+redis_password = '@2Vietnam'  # your Redis password
+
+# Create a Redis client instance
+try:
+    r = redis.StrictRedis(
+        host=redis_host,
+        port=redis_port,
+        password=redis_password,
+        decode_responses=True  # Optional: helps decode bytes to string
+    )
+    
+    # Test the connection
+    r.ping()  # This will return True if the connection is successful
+    # print("Connected to Redis")
+
+except redis.exceptions.ConnectionError:
+    print("Failed to connect to Redis. Check your settings.")
 
 # Store each encoding in a hash
 for name, encoding in zip(names, encodings):
