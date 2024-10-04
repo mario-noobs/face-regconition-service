@@ -2,7 +2,7 @@ import numpy as np
 import redis
 
 class RedisStorage:
-    def __init__(self, host='localhost', port=6379, db=0):
+    def __init__(self, host='75.119.149.223', port=6379, db=0):
         """Initialize the RedisStorage class and connect to Redis."""
         self.redis_client = redis.Redis(host=host, port=port, db=db)
 

@@ -160,6 +160,8 @@ class Retinaface(object):
 
     def reload_face_feature(self, backbone):
         self.redis_storage.load_face_data(backbone)
+        self.known_face_encodings = self.redis_storage.known_face_encodings
+        self.known_face_names     = self.redis_storage.known_face_names
 
     def encode_face_dataset(self, image_paths, names):
         face_encodings = []
