@@ -1,0 +1,10 @@
+version: '3'
+services:
+  backend:
+    image: mariobui/face-regcognition-service:v0.5
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    restart: on-failure

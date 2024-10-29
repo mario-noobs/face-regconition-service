@@ -1,0 +1,70 @@
+image: docker:latest  # this sets default image for jobs
+
+services:
+  - docker:dind
+
+variables:
+  DOCKER_HOST: tcp://docker:2375/
+  DOCKER_DRIVER: overlay2
+  DOCKER_REPO: mariobui
+  DOCKER_IMAGE: face-regcognition-service
+  DOCKER_IMAGE_VERSION: v0.5
+  SPRING_PROFILES_ACTIVE: gitlab-ci
+  PATH_TO_PROJECT: /root/face-regcognition-service/docker-compose.yml
+
+stages:
+  # - test
+  # - build
+  - package
+  - deploy
+
+# gradle-test:  # Test job for Gradle
+#   image: gradle:jdk17  # Using Gradle Docker image
+#   stage: test
+#   script:
+#     - ./gradlew clean test  # Run Gradle tests
+#   variables:
+#     SPRING_DATASOURCE_URL: $DB_URL
+#     SPRING_DATASOURCE_USERNAME: $DB_USERNAME
+#     SPRING_DATASOURCE_PASSWORD: $DB_PASSWORD
+#   artifacts:
+#     paths:
+#       - build/test-results/test/  # Ensure this path matches your project structure
+#       - build/reports/tests/       # Ensure this path matches your project structure
+
+# gradle-build:
+#   image: gradle:jdk17  # Using Gradle Docker image
+#   stage: build
+#   script:
+#     - ./gradlew clean bootJar  # Run Gradle build
+#   variables:
+#     SPRING_DATASOURCE_URL: $DB_URL
+#     SPRING_DATASOURCE_USERNAME: $DB_USERNAME
+#     SPRING_DATASOURCE_PASSWORD: $DB_PASSWORD
+#   artifacts:
+#     paths:
+#       - build/libs/*.jar  # Ensure this path matches where your JAR files are located
+
+docker-build:
+  stage: package
+  script:
+    - unset DOCKER_HOST
+    - docker info  # Check Docker connection
+    - docker build -t $DOCKER_REPO/$DOCKER_IMAGE:latest .  # Tagging the latest version correctly
+    - docker tag $DOCKER_REPO/$DOCKER_IMAGE:latest $DOCKER_REPO/$DOCKER_IMAGE:$DOCKER_IMAGE_VERSION  # Tag with version
+    - echo $DOCKER_SECRET | docker login -u $DOCKER_USER --password-stdin  # Securely logging in to Docker
+    - docker push $DOCKER_REPO/$DOCKER_IMAGE:$DOCKER_IMAGE_VERSION  # Push the image with version
+
+docker-compose-deploy:
+  stage: deploy
+  before_script:
+    - chmod 600 $SSH_KEY
+  script:
+    - >
+      ssh -o StrictHostKeyChecking=no -i $SSH_KEY gitlab@198.7.120.11
+      "
+      echo $SUDO_PASSWORD | sudo -S su 
+      sudo su
+      sudo docker compose -f $PATH_TO_PROJECT down;
+      sudo docker compose -f $PATH_TO_PROJECT up -d;
+      sudo docker image prune -f;"
