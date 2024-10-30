@@ -10,7 +10,7 @@ variables:
   DOCKER_IMAGE: face-regcognition-service
   DOCKER_IMAGE_VERSION: v0.5
   SPRING_PROFILES_ACTIVE: gitlab-ci
-  PATH_TO_PROJECT: /root/face-regcognition-service/docker-compose.yml
+  PATH_TO_PROJECT: /root/face-regcognition-service
 
 stages:
   # - test
