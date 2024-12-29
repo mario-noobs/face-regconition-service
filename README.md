@@ -1,75 +1,169 @@
-## Facenet + Retinaface: Implementation of Face Recognition Models in PyTorch
+# Face Recognition Service
+
+The Face Recognition Service is a microservice that provides facial recognition functionalities, including creating a new identity and recognizing faces in images. It exposes two main API endpoints: one for creating a new identity and another for recognizing faces from provided images.
+
+## APIs
+
+### 1. **Create Identity**
+
+This API allows you to create a new face identity. You need to provide the image data as a base64 encoded string along with the user ID and request ID. The service will register the identity using the specified algorithms for detection and recognition.
+
+#### Endpoint
+
+```
+POST /face/create-identity
+```
+
+#### Request Example
+
+```bash
+curl --location 'http://localhost:5000/face/create-identity' \
+--header 'Content-Type: application/json' \
+--data '{
+    "algorithmDet": "mobilenet",
+    "algorithmReg": "mobilenet",
+    "userId": "Mario",
+    "requestId": "123",
+    "imageBase64": ""
+}'
+```
+
+#### Request Body
+
+- `algorithmDet` (string): The face detection algorithm to be used (e.g., "mobilenet").
+- `algorithmReg` (string): The face recognition algorithm to be used (e.g., "mobilenet").
+- `userId` (string): The user ID associated with the face identity.
+- `requestId` (string): A unique request ID to track the request.
+- `imageBase64` (string): The base64 encoded image data of the user's face.
+
+#### Response
+
+The response will confirm whether the identity creation was successful.
+
+```json
+{
+    "status": "success",
+    "message": "Identity created successfully"
+}
+```
+
 ---
 
-## Table of Contents
-1. [Attention](#attention)
-2. [Environment](#environment)
-3. [Download](#download)
-4. [Prediction Steps](#prediction-steps)
-5. [References](#references)
+### 2. **Recognize Face**
 
-## Attention
-This library contains two networks: Retinaface and Facenet, which use different weights.  
-Be sure to pay attention to the selection of weights and the matching of backbones with weights.  
-The Retinaface face detection repository can be trained and used for prediction: [Retinaface-PyTorch](https://github.com/bubbliiiing/retinaface-pytorch)  
-The Facenet face recognition repository can also be trained and used for prediction: [Facenet-PyTorch](https://github.com/bubbliiiing/facenet-pytorch)  
+This API allows you to recognize a face from an image. It will compare the provided image with the registered identities and return the result of the recognition.
 
-## Environment
-`pytorch==1.2.0`
+#### Endpoint
 
-## Download
-The weight files needed for prediction can be downloaded from Baidu Cloud.  
-Link: [https://pan.baidu.com/s/1iTo4_x0DHg0GoTUQWduMZw](https://pan.baidu.com/s/1iTo4_x0DHg0GoTUQWduMZw) Extraction Code: `dmw6`  
+```
+POST /face/recognize
+```
 
-## Prediction Steps
-1. This project comes with Retinaface and Facenet models based on MobileNet. You can run them directly. If you want to use the Retinaface model based on ResNet50 and the Facenet model based on Inception ResNet v1, you need to modify the configurations.
-2. In the `retinaface.py` file, modify the `model_path` and `backbone` in the following section to match the trained files:  
-    ```python
-    _defaults = {
-        "retinaface_model_path" : 'model_data/Retinaface_mobilenet0.25.pth',
-        #-----------------------------------#
-        #   Optional retinaface_backbone options:
-        #   mobilenet and resnet50
-        #-----------------------------------#
-        "retinaface_backbone"   : "mobilenet",
-        "confidence"            : 0.5,
-        "iou"                   : 0.3,
-        #----------------------------------------------------------------------#
-        #   Whether to limit the image size.
-        #   Input image size significantly affects FPS. To speed up detection, 
-        #   you can reduce input_shape. 
-        #   If enabled, the input image size will be limited to input_shape; 
-        #   otherwise, the original image will be used for prediction.
-        #   This may lead to deviations in detection results; this issue does 
-        #   not exist with ResNet50.
-        #   Adjust input_shape based on the size of the input image, making 
-        #   sure it's a multiple of 32, e.g., [640, 640, 3].
-        #----------------------------------------------------------------------#
-        "retinaface_input_shape": [640, 640, 3],
-        #-----------------------------------#
-        #   Whether to limit the image size
-        #-----------------------------------#
-        "letterbox_image"       : True,
-        
-        "facenet_model_path"    : 'facenet_inception_resnetv1.pth',
-        #-----------------------------------#
-        #   Optional facenet_backbone options:
-        #   mobilenet and inception_resnetv1
-        #-----------------------------------#
-        "facenet_backbone"      : "inception_resnetv1",
-        "facenet_input_shape"   : [160,160,3],
-        "facenet_threshold"      : 0.9,
+#### Request Example
 
-        "cuda"                  : True
-    }
-    ```
-3. Run `encoding.py` to encode the images in the `face_dataset` folder. The naming convention for images is `XXX_1.jpg`, `XXX_2.jpg`. The corresponding database face encoding data file will be generated in the `model_data` folder.
-4. Run `predict.py` and enter the following text to make a prediction:  
-    ```python
-    img/zhangxueyou.jpg
-    ```  
-5. In `predict.py`, settings can be adjusted for FPS testing and video detection.  
+```bash
+curl --location 'http://localhost:5000/face/recognize' \
+--header 'Content-Type: application/json' \
+--data '{
+    "algorithmDet": "mobilenet",
+    "algorithmReg": "mobilenet",
+    "userId": "Mario",
+    "requestId": "123",
+    "imageBase64": ""
+}'
+```
 
-## References
-[https://github.com/biubug6/Pytorch_Retinaface](https://github.com/biubug6/Pytorch_Retinaface)
+#### Request Body
 
+- `algorithmDet` (string): The face detection algorithm to be used (e.g., "mobilenet").
+- `algorithmReg` (string): The face recognition algorithm to be used (e.g., "mobilenet").
+- `userId` (string): The user ID of the person to recognize.
+- `requestId` (string): A unique request ID to track the request.
+- `imageBase64` (string): The base64 encoded image data of the face to be recognized.
+
+#### Response
+
+The response will include the recognition result, including whether the face was recognized and the matching identity. 
+
+```json
+{
+    "code": "0000",
+    "data": {
+        "request_id": "123",
+        "searh_result": {
+            "Unknown": "0.9998"
+        },
+        "user_id": "Mario"
+    },
+    "message": "Operation successful."
+}
+```
+
+#### Response Fields
+
+- `code`: A status code indicating the operation's success or failure (e.g., "0000" for success).
+- `message`: A human-readable message providing further details about the result.
+- `data`:
+  - `request_id`: The unique request ID associated with the recognition request.
+  - `searh_result`: The result of the face recognition (e.g., the similarity score with known identities). 
+    - `"Unknown"`: The score indicating the match with the "Unknown" face.
+  - `user_id`: The user ID of the recognized person (if a match is found).
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+
+Ensure that the following software is installed:
+
+- Docker
+- Docker Compose
+
+### Setup Steps
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/mario-noobs/face-microservice.git
+   cd face-microservice/face-regconition-service
+   ```
+
+2. Build the service:
+
+   ```bash
+   docker build -t face-recognition-service .
+   ```
+
+3. Run the service:
+
+   ```bash
+   docker run -p 5000:5000 face-recognition-service
+   ```
+
+4. The service will be running at `http://localhost:5000`.
+
+---
+
+## Notes
+
+- **Image Base64 Encoding**: For the image input in the API requests, you must provide the image as a base64 encoded string. Tools like [base64-image.de](https://www.base64-image.de/) can help with encoding images into base64 format.
+- **Algorithms**: The service supports various algorithms for face detection and recognition. In this example, `mobilenet` is used for both detection and recognition.
+  
+---
+
+## Troubleshooting
+
+- If the service is not responding as expected, check the logs for errors:
+
+  ```bash
+  docker logs <container-name>
+  ```
+
+- Ensure that the base64 image data is correctly formatted and not empty.
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
