@@ -132,6 +132,46 @@ def predict():
     logger.info(recognizeFaceFeatureResponse.to_dict())
 
     return jsonify(recognizeFaceFeatureResponse.to_dict())
+
+@app.route('/face/delete-identity', methods=['DELETE'])
+def delete_identity():
+    """Delete face identity from Redis"""
+    try:
+        data = request.json
+        userId = data.get("userId")
+        algorithm = data.get("algorithm", "mobilenet")  # Default to mobilenet
+        requestId = data.get("requestId")
+        
+        if not userId:
+            logger.warning("Missing userId in delete request.")
+            return jsonify({
+                "status": "error",
+                "message": "userId is required",
+                "request_id": requestId
+            }), 400
+        
+        logger.info(f"Deleting face identity for userId: {userId}, algorithm: {algorithm}")
+        
+        # Call the handler method
+        deletion_result = face_handler.delete_feature(userId, algorithm)
+        
+        # Add request_id to the response
+        deletion_result["request_id"] = requestId
+        
+        if deletion_result["status"] == "success":
+            logger.info(f"Successfully deleted face identity for userId: {userId}")
+            return jsonify(deletion_result), 200
+        else:
+            logger.warning(f"Failed to delete face identity for userId: {userId}")
+            return jsonify(deletion_result), 404
+            
+    except Exception as e:
+        logger.error(f"Error in delete_identity endpoint: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Internal server error: {str(e)}",
+            "request_id": data.get("requestId") if 'data' in locals() else None
+        }), 500
     
 if __name__ == '__main__':
     #app.run(debug=True, host="0.0.0.0")

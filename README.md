@@ -1,6 +1,6 @@
 # Face Recognition Service
 
-The Face Recognition Service is a microservice that provides facial recognition functionalities, including creating a new identity and recognizing faces in images. It exposes two main API endpoints: one for creating a new identity and another for recognizing faces from provided images.
+The Face Recognition Service is a microservice that provides facial recognition functionalities, including creating a new identity, recognizing faces in images, and deleting existing identities. It exposes three main API endpoints: one for creating a new identity, another for recognizing faces from provided images, and a third for deleting face identities from the system.
 
 ## APIs
 
@@ -111,6 +111,76 @@ The response will include the recognition result, including whether the face was
 
 ---
 
+### 3. **Delete Identity**
+
+This API allows you to delete an existing face identity from the system. Once deleted, the face will no longer be recognized in future recognition requests.
+
+#### Endpoint
+
+```
+DELETE /face/delete-identity
+```
+
+#### Request Example
+
+```bash
+curl --location --request DELETE 'http://localhost:5000/face/delete-identity' \
+--header 'Content-Type: application/json' \
+--data '{
+    "userId": "Mario",
+    "algorithm": "mobilenet",
+    "requestId": "125"
+}'
+```
+
+#### Request Body
+
+- `userId` (string, required): The user ID of the face identity to be deleted.
+- `algorithm` (string, optional): The algorithm used for the face encoding. Defaults to "mobilenet" if not specified.
+- `requestId` (string, optional): A unique request ID to track the request.
+
+#### Response
+
+The response will confirm whether the identity deletion was successful.
+
+**Success Response (200):**
+```json
+{
+    "status": "success",
+    "message": "Face feature deleted successfully",
+    "user_id": "Mario",
+    "request_id": "125"
+}
+```
+
+**Error Response (404 - Identity not found):**
+```json
+{
+    "status": "error",
+    "message": "Face feature not found for user_id: Mario",
+    "user_id": "Mario",
+    "request_id": "125"
+}
+```
+
+**Error Response (400 - Missing userId):**
+```json
+{
+    "status": "error",
+    "message": "userId is required",
+    "request_id": "125"
+}
+```
+
+#### Response Fields
+
+- `status`: Indicates whether the operation was successful ("success") or failed ("error").
+- `message`: A human-readable message providing details about the result.
+- `user_id`: The user ID that was processed.
+- `request_id`: The unique request ID associated with the deletion request (if provided).
+
+---
+
 ## Installation & Setup
 
 ### Prerequisites
@@ -145,12 +215,74 @@ Ensure that the following software is installed:
 
 ---
 
+## API Error Codes
+
+The service uses standardized error codes for consistent error handling:
+
+| Code | Message | Description |
+|------|---------|-------------|
+| 0000 | Operation successful | Success |
+| 4000 | Name or image is missing | Missing required fields |
+| 4001 | Failed to decode the image | Invalid base64 image |
+| 4002 | Algorithm is missing | Missing algorithm parameter |
+| 1111 | An error occurred while processing the request | Generic error |
+| 5000 | Failed to save the image | Image save error |
+| 5001 | Error create image feature | Feature extraction error |
+| 5002 | No face detected | No face found in image |
+
 ## Notes
 
 - **Image Base64 Encoding**: For the image input in the API requests, you must provide the image as a base64 encoded string. Tools like [base64-image.de](https://www.base64-image.de/) can help with encoding images into base64 format.
-- **Algorithms**: The service supports various algorithms for face detection and recognition. In this example, `mobilenet` is used for both detection and recognition.
+- **Algorithms**: The service supports various algorithms for face detection and recognition. Available options include:
+  - `mobilenet` (default, recommended for most use cases)
+  - `inception_resnetv1` (higher accuracy, more resource intensive)
+- **Data Storage**: Face encodings are stored in Redis using a hash structure with keys like `{algorithm}_face_data`.
+- **Face Detection**: The service automatically detects faces in provided images and extracts the largest face for processing.
   
 ---
+
+## API Usage Flow
+
+### Typical Workflow
+
+1. **Create Identity**: Register a new face identity using the `/face/create-identity` endpoint
+2. **Recognize Face**: Use the `/face/recognize` endpoint to identify faces in new images
+3. **Delete Identity**: Remove unwanted identities using the `/face/delete-identity` endpoint
+
+### Example Complete Flow
+
+```bash
+# 1. Create a new identity
+curl --location 'http://localhost:5000/face/create-identity' \
+--header 'Content-Type: application/json' \
+--data '{
+    "algorithmDet": "mobilenet",
+    "algorithmReg": "mobilenet",
+    "userId": "john_doe",
+    "requestId": "req_001",
+    "imageBase64": "your_base64_image_here"
+}'
+
+# 2. Recognize a face
+curl --location 'http://localhost:5000/face/recognize' \
+--header 'Content-Type: application/json' \
+--data '{
+    "algorithmDet": "mobilenet",
+    "algorithmReg": "mobilenet",
+    "userId": "john_doe",
+    "requestId": "req_002",
+    "imageBase64": "your_base64_image_here"
+}'
+
+# 3. Delete the identity when no longer needed
+curl --location --request DELETE 'http://localhost:5000/face/delete-identity' \
+--header 'Content-Type: application/json' \
+--data '{
+    "userId": "john_doe",
+    "algorithm": "mobilenet",
+    "requestId": "req_003"
+}'
+```
 
 ## Troubleshooting
 
@@ -161,6 +293,9 @@ Ensure that the following software is installed:
   ```
 
 - Ensure that the base64 image data is correctly formatted and not empty.
+- Make sure Redis is running and accessible if running the service locally.
+- Verify that the provided image contains a clear, front-facing face for better detection accuracy.
+- Check that the `userId` exists when performing recognition or deletion operations.
 
 ---
 

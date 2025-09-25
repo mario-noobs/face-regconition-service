@@ -279,12 +279,15 @@ class Retinaface(object):
         np.save("model_data/{backbone}_face_encoding.npy".format(backbone=self.facenet_backbone),face_encodings)
         np.save("model_data/{backbone}_names.npy".format(backbone=self.facenet_backbone),names)
     
-    def encode_face_image(self, name, image, backbone) -> int:
-        
-        status = 2
+    def encode_face_image(self, name, image, backbone) -> dict:
+    
+        result = {
+            "status": 2,
+            "face_encoding_base64": None,
+            "message": "Success"
+        }
 
         try:
-
             image = base64_to_numpy_image(image)
                     
             old_image   = image.copy()
@@ -327,7 +330,9 @@ class Retinaface(object):
                 boxes_conf_landms = non_max_suppression(boxes_conf_landms, self.confidence)
 
                 if len(boxes_conf_landms) <= 0:
-                    return 0
+                    result["status"] = 0
+                    result["message"] = "No face detected"
+                    return result
                 
                 if self.letterbox_image:
                     boxes_conf_landms = retinaface_correct_boxes(boxes_conf_landms, \
@@ -338,14 +343,14 @@ class Retinaface(object):
 
             best_face_location  = None
             biggest_area        = 0
-            for result in boxes_conf_landms:
-                left, top, right, bottom = result[0:4]
+            for result_box in boxes_conf_landms:
+                left, top, right, bottom = result_box[0:4]
 
                 w = right - left
                 h = bottom - top
                 if w * h > biggest_area:
                     biggest_area = w * h
-                    best_face_location = result
+                    best_face_location = result_box
 
             crop_img = old_image[int(best_face_location[1]):int(best_face_location[3]), int(best_face_location[0]):int(best_face_location[2])]
             landmark = np.reshape(best_face_location[5:],(5,2)) - np.array([int(best_face_location[0]),int(best_face_location[1])])
@@ -362,13 +367,56 @@ class Retinaface(object):
 
                 face_encoding = self.facenet(crop_img)[0].cpu().numpy()
 
+                # Store in Redis
                 self.redis_storage.store_face_data([name], [face_encoding], backbone)
+                
+                # Convert face encoding to base64
+                import base64
+                face_encoding_bytes = face_encoding.tobytes()
+                face_encoding_base64 = base64.b64encode(face_encoding_bytes).decode('utf-8')
+                
+                result["face_encoding_base64"] = face_encoding_base64
+                result["encoding_shape"] = face_encoding.shape  # Store shape info for reconstruction
 
         except Exception as e:
             print("Something error ", e)
-            status = -1
+            result["status"] = -1
+            result["message"] = f"Error: {str(e)}"
 
-        return status
+        return result
+
+    def delete_face_data(self, user_id: str, algorithm: str = None) -> bool:
+        """
+        Delete face data from Redis by user_id
+        
+        Args:
+            user_id (str): The user ID to delete
+            algorithm (str, optional): The algorithm used (for specific key patterns)
+        
+        Returns:
+            bool: True if deletion was successful, False if user not found
+        """
+        try:
+            # Use the algorithm or default to mobilenet
+            backbone = algorithm if algorithm else "mobilenet"
+            
+            # Get the Redis key for the face data
+            redis_key = f"{backbone}_face_data"
+            
+            # Check if the user exists in Redis
+            if not self.redis_storage.redis_client.hexists(redis_key, user_id):
+                print(f"No face data found for user_id: {user_id} with algorithm: {backbone}")
+                return False
+            
+            # Delete the user's face data from the hash
+            deleted_count = self.redis_storage.redis_client.hdel(redis_key, user_id)
+            
+            print(f"Deleted face data for user_id: {user_id}, algorithm: {backbone}")
+            return deleted_count > 0
+            
+        except Exception as e:
+            print(f"Error deleting face data for {user_id}: {e}")
+            return False
 
     #---------------------------------------------------#
     #   检测图片

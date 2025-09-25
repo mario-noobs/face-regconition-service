@@ -14,7 +14,8 @@ class CreateFaceFeatureResponse(BaseResponse):
         super().__init__()
         self.user_id = None
         self.request_id = None
-        self.feature = None
+        self.face_encoding_base64 = None  # Add this field
+        self.encoding_shape = None        # Add this field
 
     def set_data(self, user_id: int, request_id: str, feature):
         self.user_id = user_id
@@ -27,7 +28,8 @@ class CreateFaceFeatureResponse(BaseResponse):
             "data": {
                 "user_id": self.user_id,
                 "request_id": self.request_id,
-                "feature": self.feature,
+                "face_encoding_base64": self.face_encoding_base64,
+                "encoding_shape": self.encoding_shape
             }
         })
         return base_dict
