@@ -142,6 +142,14 @@ def delete_identity():
         algorithm = data.get("algorithm", "mobilenet")  # Default to mobilenet
         requestId = data.get("requestId")
         
+        # Log request in JSON format
+        logger.info(json.dumps({
+            "event": "delete_identity_request",
+            "requestId": requestId,
+            "userId": userId,
+            "algorithm": algorithm
+        }))
+        
         if not userId:
             logger.warning("Missing userId in delete request.")
             return jsonify({
@@ -159,19 +167,37 @@ def delete_identity():
         deletion_result["request_id"] = requestId
         
         if deletion_result["status"] == "success":
-            logger.info(f"Successfully deleted face identity for userId: {userId}")
+            logger.info(json.dumps({
+                "event": "delete_identity_response",
+                "requestId": requestId,
+                "status": "success",
+                "userId": userId,
+                "response": deletion_result
+            }))
             return jsonify(deletion_result), 200
         else:
-            logger.warning(f"Failed to delete face identity for userId: {userId}")
+            logger.warning(json.dumps({
+                "event": "delete_identity_response",
+                "requestId": requestId,
+                "status": "failed",
+                "userId": userId,
+                "response": deletion_result
+            }))
             return jsonify(deletion_result), 404
             
     except Exception as e:
-        logger.error(f"Error in delete_identity endpoint: {e}")
-        return jsonify({
+        error_response = {
             "status": "error",
             "message": f"Internal server error: {str(e)}",
             "request_id": data.get("requestId") if 'data' in locals() else None
-        }), 500
+        }
+        logger.error(json.dumps({
+            "event": "delete_identity_error",
+            "requestId": data.get("requestId") if 'data' in locals() else None,
+            "error": str(e),
+            "response": error_response
+        }))
+        return jsonify(error_response), 500
     
 if __name__ == '__main__':
     #app.run(debug=True, host="0.0.0.0")
