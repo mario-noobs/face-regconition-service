@@ -10,6 +10,13 @@ import base64
 import numpy as np
 import cv2
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Constants
+IMAGE_FORMAT = "JPEG"
+
 def base64_to_numpy_image(base64_string):
     """Convert a Base64 string to a NumPy array."""
     # Decode the Base64 string
