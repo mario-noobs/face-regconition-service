@@ -18,8 +18,10 @@ jobs:
     uses: mario-noobs/ci-baseline/.github/workflows/_ci-python.yml@main
     with:
       python_version: "3.10"
-      lint_tool: ruff
       test_enabled: true
+      sonar_project_key: mario-noobs_face-regconition-service
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   docker:
     needs: ci
