@@ -38,28 +38,17 @@ class FaceHandler(FaceFeatureExtractionInterface):
             # Call encode_face_image method
             encoding_result = self.retinaface.encode_face_image(request.user_id, request.image_base64, request.alg_reg)
             
-            # Handle dictionary return format
-            if isinstance(encoding_result, dict):
-                if encoding_result["status"] == 0:
-                    self.logger.warning(f"No face detected for user_id: {request.user_id}")
-                    raise FaceFeatureException(Messages.NO_FACE)
-                
-                if encoding_result["status"] < 0:
-                    self.logger.error(f"Encoding error for user_id: {request.user_id}, error: {encoding_result.get('message')}")
-                    raise FaceFeatureException(Messages.IMAGE_ENCODING_ERROR)
-                
-                # Store the face encoding in the response
-                response.face_encoding_base64 = encoding_result.get("face_encoding_base64")
-                response.encoding_shape = encoding_result.get("encoding_shape")
-                
-                self.logger.info(f"Face feature created successfully for user_id: {request.user_id}")
-                
-            else:
-                # Backward compatibility for integer return
-                if encoding_result == 0:
-                    raise FaceFeatureException(Messages.NO_FACE)
-                if encoding_result < 0:
-                    raise FaceFeatureException(Messages.IMAGE_ENCODING_ERROR)
+            if encoding_result["status"] == 0:
+                self.logger.warning(f"No face detected for user_id: {request.user_id}")
+                raise FaceFeatureException(Messages.NO_FACE)
+
+            if encoding_result["status"] < 0:
+                self.logger.error(f"Encoding error for user_id: {request.user_id}, error: {encoding_result.get('message')}")
+                raise FaceFeatureException(Messages.IMAGE_ENCODING_ERROR)
+
+            response.face_encoding_base64 = encoding_result.get("face_encoding_base64")
+            response.encoding_shape = encoding_result.get("encoding_shape")
+            self.logger.info(f"Face feature created successfully for user_id: {request.user_id}")
 
             response.code = Messages.SUCCESS["code"]
             response.message = Messages.SUCCESS["message"]
@@ -127,15 +116,10 @@ class FaceHandler(FaceFeatureExtractionInterface):
             # Call the retinaface method to delete from Redis
             deletion_result = self.retinaface.delete_face_data(user_id, algorithm)
             
-            if isinstance(deletion_result, bool):
-                if not deletion_result:
-                    result["status"] = "error"
-                    result["message"] = f"Face feature not found for user_id: {user_id}"
-                    self.logger.warning(f"Face feature not found for deletion: {user_id}")
-            elif isinstance(deletion_result, dict):
-                if deletion_result.get("status") == "error":
-                    result["status"] = "error"
-                    result["message"] = deletion_result.get("message", "Unknown error occurred")
+            if not deletion_result:
+                result["status"] = "error"
+                result["message"] = f"Face feature not found for user_id: {user_id}"
+                self.logger.warning(f"Face feature not found for deletion: {user_id}")
             
             self.logger.info(f"Face feature deletion completed for {user_id}: {result['status']}")
             
