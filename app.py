@@ -1,204 +1,165 @@
-from tokenize import String
-from flask import Flask, jsonify, abort, make_response, request
-import numpy as np
-import base64
 import json
-from io import BytesIO
-import cv2, io
-from PIL import Image   
-import os, logging
-from retinaface import Retinaface
-from model.messages import Messages
-from model import *
-from utils.helpers import is_valid_base64_image, convert_string_to_hash
-import hashlib
 import logging
-from PIL import Image
-from io import BytesIO
-from handler.handlers import FaceHandler, FaceFeatureExtractionInterface
+import os
+
+from flask import Flask, jsonify, request
+
+from handler.handlers import FaceHandler
+from model.exceptions import FaceFeatureException
+from model.messages import Messages
 from model.request import CreateFaceFeatureRequest, RecognizeFaceFeatureRequest
 from model.response import CreateFaceFeatureResponse, RecognizeFaceFeatureResponse
-from model.exceptions import FaceFeatureException
+from utils.helpers import is_valid_base64_image
 
 app = Flask(__name__)
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Constants
-FACE_DATASET_DIR = "face_dataset"
-IMAGE_FORMAT = "JPEG"
+face_handler = FaceHandler(logger=logger)
 
-face_handler = FaceHandler(logger = logger)
+
+def _parse_face_request(data):
+    return (
+        data.get("userId"),
+        data.get("imageBase64"),
+        data.get("flow"),
+        data.get("requestId"),
+        data.get("algorithmDet"),
+        data.get("algorithmReg"),
+    )
+
+
+def _validate_common_fields(user_id, image, algorithm_det, algorithm_reg):
+    if not user_id or not image:
+        logger.warning("Missing userId or image in request.")
+        raise FaceFeatureException(Messages.MISSING_FIELDS)
+    if not algorithm_det or not algorithm_reg:
+        logger.warning("Missing algorithm in request.")
+        raise FaceFeatureException(Messages.MISSING_ALG)
+
 
 @app.route('/face/create-identity', methods=['POST'])
-def add_identity(): 
+def add_identity():
+    createFaceFeatureResponse = CreateFaceFeatureResponse()
     try:
-
         data = request.json
-        
-        userId = (data.get("userId"))
-        image = (data.get("imageBase64"))
-        flow = (data.get("flow"))
-        requestId = (data.get("requestId"))
-        algorithm_det = (data.get("algorithmDet"))
-        algorithm_reg = (data.get("algorithmReg"))
+        user_id, image, flow, request_id, algorithm_det, algorithm_reg = _parse_face_request(data)
 
-        createFaceFeatureResponse = CreateFaceFeatureResponse()
-        
-        if not userId or not image:
-            logger.warning("Missing userId or image in request.")
-            raise FaceFeatureException(Messages.MISSING_FIELDS)
-
-        if not algorithm_det or not algorithm_reg:
-            logger.warning("Missing algorithm in request.")
-            raise FaceFeatureException(Messages.MISSING_ALG)  
-
-        createFaceFeatureRequest = CreateFaceFeatureRequest()
-        createFaceFeatureRequest.user_id = userId
-        createFaceFeatureRequest.request_id = requestId
-        createFaceFeatureRequest.flow = flow
-        createFaceFeatureRequest.image_base64 = image
-        createFaceFeatureRequest.alg_det = algorithm_det
-        createFaceFeatureRequest.alg_reg = algorithm_reg        
-      
-        logger.info(createFaceFeatureRequest.to_dict())
+        _validate_common_fields(user_id, image, algorithm_det, algorithm_reg)
 
         if not is_valid_base64_image(image):
             logger.warning("Invalid Base64 Image.")
-            raise FaceFeatureException(Messages.IMAGE_BASE64_ERROR) 
+            raise FaceFeatureException(Messages.IMAGE_BASE64_ERROR)
 
-        createFaceFeatureResponse = face_handler.create_feature(createFaceFeatureRequest)
+        req = CreateFaceFeatureRequest()
+        req.user_id      = user_id
+        req.request_id   = request_id
+        req.flow         = flow
+        req.image_base64 = image
+        req.alg_det      = algorithm_det
+        req.alg_reg      = algorithm_reg
+
+        logger.info(req.to_dict())
+        createFaceFeatureResponse = face_handler.create_feature(req)
 
     except FaceFeatureException as ce:
         logger.error("FaceFeatureException processing request: %s", ce)
-        createFaceFeatureResponse.code = ce.code
+        createFaceFeatureResponse.code    = ce.code
         createFaceFeatureResponse.message = ce.message
 
     except Exception as e:
         logger.error("Error processing request: %s", e)
-        createFaceFeatureResponse.code = Messages.GENERIC_ERROR['code']
+        createFaceFeatureResponse.code    = Messages.GENERIC_ERROR['code']
         createFaceFeatureResponse.message = str(e)
 
     logger.info(createFaceFeatureResponse.to_dict())
-
     return jsonify(createFaceFeatureResponse.to_dict())
+
 
 @app.route('/face/recognize', methods=['POST'])
 def predict():
+    recognizeFaceFeatureResponse = RecognizeFaceFeatureResponse()
     try:
-        
         data = request.json
-        userId = (data.get("userId"))
-        image = (data.get("imageBase64"))
-        flow = (data.get("flow"))
-        requestId = (data.get("requestId"))
-        algorithm_det = (data.get("algorithmDet"))
-        algorithm_reg = (data.get("algorithmReg"))
+        user_id, image, flow, request_id, algorithm_det, algorithm_reg = _parse_face_request(data)
 
-        recognizeFaceFeatureResponse = RecognizeFaceFeatureResponse()
-        
-        if not userId or not image:
-            logger.warning("Missing userId or image in request.")
-            raise FaceFeatureException(Messages.MISSING_FIELDS)
+        _validate_common_fields(user_id, image, algorithm_det, algorithm_reg)
 
-        if not algorithm_det or not algorithm_reg:
-            logger.warning("Missing algorithm in request.")
-            raise FaceFeatureException(Messages.MISSING_ALG)  
+        req = RecognizeFaceFeatureRequest()
+        req.user_id      = user_id
+        req.request_id   = request_id
+        req.flow         = flow
+        req.image_base64 = image
+        req.alg_det      = algorithm_det
+        req.alg_reg      = algorithm_reg
 
-        recognizeFaceFeatureRequest = RecognizeFaceFeatureRequest()
-        recognizeFaceFeatureRequest.user_id = userId
-        recognizeFaceFeatureRequest.request_id = requestId
-        recognizeFaceFeatureRequest.flow = flow
-        recognizeFaceFeatureRequest.image_base64 = image
-        recognizeFaceFeatureRequest.alg_det = algorithm_det
-        recognizeFaceFeatureRequest.alg_reg = algorithm_reg        
-      
-        logger.info(recognizeFaceFeatureRequest.to_dict())
-
-        recognizeFaceFeatureResponse = face_handler.face_search(recognizeFaceFeatureRequest)
+        logger.info(req.to_dict())
+        recognizeFaceFeatureResponse = face_handler.face_search(req)
 
     except FaceFeatureException as ce:
         logger.error("FaceFeatureException processing request: %s", ce)
-        recognizeFaceFeatureResponse.code = ce.code
+        recognizeFaceFeatureResponse.code    = ce.code
         recognizeFaceFeatureResponse.message = ce.message
 
     except Exception as e:
         logger.error("Error processing request: %s", e)
-        recognizeFaceFeatureResponse.code = Messages.GENERIC_ERROR['code']
+        recognizeFaceFeatureResponse.code    = Messages.GENERIC_ERROR['code']
         recognizeFaceFeatureResponse.message = str(e)
 
     logger.info(recognizeFaceFeatureResponse.to_dict())
-
     return jsonify(recognizeFaceFeatureResponse.to_dict())
+
 
 @app.route('/face/delete-identity', methods=['DELETE'])
 def delete_identity():
-    """Delete face identity from Redis"""
     try:
-        data = request.json
-        userId = data.get("userId")
-        algorithm = data.get("algorithm", "mobilenet")  # Default to mobilenet
-        requestId = data.get("requestId")
-        
-        # Log request in JSON format
+        data       = request.json
+        user_id    = data.get("userId")
+        algorithm  = data.get("algorithm", "mobilenet")
+        request_id = data.get("requestId")
+
         logger.info(json.dumps({
-            "event": "delete_identity_request",
-            "requestId": requestId,
-            "userId": userId,
-            "algorithm": algorithm
+            "event":     "delete_identity_request",
+            "requestId": request_id,
+            "userId":    user_id,
+            "algorithm": algorithm,
         }))
-        
-        if not userId:
+
+        if not user_id:
             logger.warning("Missing userId in delete request.")
-            return jsonify({
-                "status": "error",
-                "message": "userId is required",
-                "request_id": requestId
-            }), 400
-        
-        logger.info(f"Deleting face identity for userId: {userId}, algorithm: {algorithm}")
-        
-        # Call the handler method
-        deletion_result = face_handler.delete_feature(userId, algorithm)
-        
-        # Add request_id to the response
-        deletion_result["request_id"] = requestId
-        
-        if deletion_result["status"] == "success":
-            logger.info(json.dumps({
-                "event": "delete_identity_response",
-                "requestId": requestId,
-                "status": "success",
-                "userId": userId,
-                "response": deletion_result
-            }))
-            return jsonify(deletion_result), 200
-        else:
-            logger.warning(json.dumps({
-                "event": "delete_identity_response",
-                "requestId": requestId,
-                "status": "failed",
-                "userId": userId,
-                "response": deletion_result
-            }))
-            return jsonify(deletion_result), 404
-            
+            return jsonify({"status": "error", "message": "userId is required", "request_id": request_id}), 400
+
+        deletion_result = face_handler.delete_feature(user_id, algorithm)
+        deletion_result["request_id"] = request_id
+
+        status_code = 200 if deletion_result["status"] == "success" else 404
+        log_status  = "success" if status_code == 200 else "failed"
+
+        logger.info(json.dumps({
+            "event":     "delete_identity_response",
+            "requestId": request_id,
+            "status":    log_status,
+            "userId":    user_id,
+            "response":  deletion_result,
+        }))
+        return jsonify(deletion_result), status_code
+
     except Exception as e:
+        request_id    = data.get("requestId") if 'data' in locals() else None
         error_response = {
-            "status": "error",
-            "message": f"Internal server error: {str(e)}",
-            "request_id": data.get("requestId") if 'data' in locals() else None
+            "status":     "error",
+            "message":    f"Internal server error: {str(e)}",
+            "request_id": request_id,
         }
         logger.error(json.dumps({
-            "event": "delete_identity_error",
-            "requestId": data.get("requestId") if 'data' in locals() else None,
-            "error": str(e),
-            "response": error_response
+            "event":     "delete_identity_error",
+            "requestId": request_id,
+            "error":     str(e),
+            "response":  error_response,
         }))
         return jsonify(error_response), 500
-    
+
+
 if __name__ == '__main__':
-    #app.run(debug=True, host="0.0.0.0")
     app.run(debug=True, host="0.0.0.0", port=5000)
